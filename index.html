@@ -2,46 +2,85 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Laundry‑Room Gantt – Kid‑Friendly</title>
-<!-- Google Fonts for a playful vibe -->
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+<title>Laundry-Room Gantt – Kid-Friendly & Editable</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   html,body{height:100%;margin:0;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif}
-  h1{margin:12px;text-align:center;font-family:'Fredoka',sans-serif;font-weight:600;font-size:2rem;color:#333}
-  #chart{width:100%;height:80vh}
+  h1{margin:10px 6px;text-align:center;font-family:'Fredoka',sans-serif;font-weight:600;color:#333}
+  #chart{width:100%;height:70vh}
   #hint{text-align:center;font-family:'Fredoka',sans-serif;font-size:1rem;margin-top:4px;color:#555}
-  @media(max-width:600px){#chart{height:72vh}}
+  #taskForm{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px;font-family:'Fredoka',sans-serif}
+  #taskForm input, #taskForm button{padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.9rem}
+  #taskForm input[type="date"]{font-family:inherit}
+  #taskForm button{background:#06d6a0;color:#fff;cursor:pointer;border:none;font-weight:600}
+  #taskForm button:hover{background:#05b68b}
+  @media(max-width:600px){#chart{height:60vh}}
 </style>
 <script src="https://www.gstatic.com/charts/loader.js"></script>
 <script>
   google.charts.load('current',{packages:['timeline']});
-  google.charts.setOnLoadCallback(drawChart);
+  google.charts.setOnLoadCallback(init);
 
-  const colorPalette=[
-    '#ff6f61', // salmon
-    '#6ec5ff', // sky
-    '#ffd166', // sunflower
-    '#06d6a0', // mint
-    '#e14ecd', // magenta
-    '#ffb5a7', // peach
-    '#4cc9f0', // azure
-    '#c77dff', // lavender
-    '#70d6ff', // baby blue
-    '#ffafcc'  // pink
+  const palette=[
+    '#ff6f61','#6ec5ff','#ffd166','#06d6a0','#e14ecd',
+    '#ffb5a7','#4cc9f0','#c77dff','#70d6ff','#ffafcc'
   ];
 
-  // Persist finished state in localStorage
-  const doneKey='laundryRenoDone';
-  let doneState=JSON.parse(localStorage.getItem(doneKey)||'{}');
+  const storageKey='laundryRenoTasks_v2';
 
-  function saveDone(){localStorage.setItem(doneKey,JSON.stringify(doneState));}
+  const defaultTasks=[
+    ['Pre-Renovation','🧹 Purge & Sort','2025-06-01','2025-06-02'],
+    ['Pre-Renovation','📏 Measure & Plan','2025-06-02','2025-06-03'],
+    ['Pre-Renovation','🛒 Order Materials','2025-06-03','2025-06-05'],
+    ['Pre-Renovation','📐 Surface Prep & Masking','2025-06-06','2025-06-06'],
 
+    ['Week 1: Light & Colour','💡 Swap Ceiling Lights','2025-06-07','2025-06-07'],
+    ['Week 1: Light & Colour','🎨 Paint Accent Wall','2025-06-08','2025-06-08'],
+    ['Week 1: Light & Colour','🌈 Ceiling Paint & Cove LEDs','2025-06-09','2025-06-10'],
+
+    ['Week 2: Floor & Smart','👢 Remove Carpet / Prep','2025-06-14','2025-06-14'],
+    ['Week 2: Floor & Smart','🪵 Lay Vinyl Planks','2025-06-15','2025-06-15'],
+    ['Week 2: Floor & Smart','🌡️ Install Humidity Sensor + Fan','2025-06-16','2025-06-16'],
+
+    ['Week 3: Storage Build','🛠 Assemble PLATSA Cabinets','2025-06-21','2025-06-21'],
+    ['Week 3: Storage Build','🔨 Install Counter & Sink','2025-06-22','2025-06-22'],
+    ['Week 3: Storage Build','📦 Mount BOAXEL System','2025-06-23','2025-06-23'],
+    ['Week 3: Storage Build','🚪 Fit Sliding Curtain Track','2025-06-24','2025-06-24'],
+
+    ['Week 4: Finishing','🎨 Spray Paint Visible Pipes','2025-06-28','2025-06-28'],
+    ['Week 4: Finishing','🧺 Install Pulley Drying Rack','2025-06-29','2025-06-29'],
+    ['Week 4: Finishing','☕ Coffee Nook & Décor','2025-06-30','2025-06-30'],
+    ['Week 4: Finishing','✅ QA + Snag-list Fixes','2025-07-01','2025-07-01'],
+
+    ['Post-Renovation','🔧 Smart-Sensor Test & Tuning','2025-07-02','2025-07-02'],
+    ['Post-Renovation','📸 Photo Docs / Celebrate','2025-07-03','2025-07-03']
+  ].map((t,i)=>({phase:t[0],title:t[1],start:t[2],end:t[3],done:false,id:i}));
+
+  let tasks;
   let chart,data,options,container;
-  let originalStyles=[]; // keep original colors per row
 
-  function d(y,m,day){return new Date(y,m,day);} // helper (month 0‑based)
+  function init(){
+    tasks=loadTasks();
+    buildChart();
+    buildForm();
+    window.addEventListener('resize',()=>chart.draw(data,options));
+  }
 
-  function buildData(){
+  function loadTasks(){
+    const stored=localStorage.getItem(storageKey);
+    if(stored){
+      try{return JSON.parse(stored);}catch(e){console.error(e)}
+    }
+    saveTasks(defaultTasks);
+    return JSON.parse(JSON.stringify(defaultTasks));
+  }
+
+  function saveTasks(t){localStorage.setItem(storageKey,JSON.stringify(t));}
+
+  function buildChart(){
+    if(!container) container=document.getElementById('chart');
+    if(!chart) chart=new google.visualization.Timeline(container);
+
     data=new google.visualization.DataTable();
     data.addColumn({type:'string',id:'Phase'});
     data.addColumn({type:'string',id:'Task'});
@@ -49,71 +88,70 @@
     data.addColumn({type:'date',id:'End'});
     data.addColumn({type:'string',role:'style'});
 
-    const tasks=[
-      // phase, task, start, end
-      ['Pre‑Renovation','🧹 Purge & Sort',d(2025,5,1),d(2025,5,2)],
-      ['Pre‑Renovation','📏 Measure & Plan',d(2025,5,2),d(2025,5,3)],
-      ['Pre‑Renovation','🛒 Order Materials',d(2025,5,3),d(2025,5,5)],
-      ['Pre‑Renovation','📐 Surface Prep & Masking',d(2025,5,6),d(2025,5,6)],
-
-      ['Week 1: Light & Colour','💡 Swap Ceiling Lights',d(2025,5,7),d(2025,5,7)],
-      ['Week 1: Light & Colour','🎨 Paint Accent Wall',d(2025,5,8),d(2025,5,8)],
-      ['Week 1: Light & Colour','🌈 Ceiling Paint & Cove LEDs',d(2025,5,9),d(2025,5,10)],
-
-      ['Week 2: Floor & Smart','👢 Remove Carpet / Prep',d(2025,5,14),d(2025,5,14)],
-      ['Week 2: Floor & Smart','🪵 Lay Vinyl Planks',d(2025,5,15),d(2025,5,15)],
-      ['Week 2: Floor & Smart','🌡️ Install Humidity Sensor + Fan',d(2025,5,16),d(2025,5,16)],
-
-      ['Week 3: Storage Build','🛠 Assemble PLATSA Cabinets',d(2025,5,21),d(2025,5,21)],
-      ['Week 3: Storage Build','🔨 Install Counter & Sink',d(2025,5,22),d(2025,5,22)],
-      ['Week 3: Storage Build','📦 Mount BOAXEL System',d(2025,5,23),d(2025,5,23)],
-      ['Week 3: Storage Build','🚪 Fit Sliding Curtain Track',d(2025,5,24),d(2025,5,24)],
-
-      ['Week 4: Finishing','🎨 Spray Paint Visible Pipes',d(2025,5,28),d(2025,5,28)],
-      ['Week 4: Finishing','🧺 Install Pulley Drying Rack',d(2025,5,29),d(2025,5,29)],
-      ['Week 4: Finishing','☕ Coffee Nook & Décor',d(2025,5,30),d(2025,5,30)],
-      ['Week 4: Finishing','✅ QA + Snag‑list Fixes',d(2025,6,1),d(2025,6,1)],
-
-      ['Post‑Renovation','🔧 Smart‑Sensor Test & Tuning',d(2025,6,2),d(2025,6,2)],
-      ['Post‑Renovation','📸 Photo Docs / Celebrate',d(2025,6,3),d(2025,6,3)]
-    ];
-
     tasks.forEach((t,idx)=>{
-      const color=colorPalette[idx%colorPalette.length];
-      originalStyles[idx]=`color:${color}`;
-      data.addRow([t[0],t[1],t[2],t[3], doneState[idx]? 'color:#A0A0A0;stroke-dasharray:5 2' : originalStyles[idx]]);
+      const color= palette[idx%palette.length];
+      const style=t.done? 'color:#A0A0A0;stroke-dasharray:5 2':'';
+      data.addRow([t.phase,t.title,new Date(t.start),new Date(t.end),style||`color:${color}`]);
     });
-  }
 
-  function drawChart(){
-    if(!container){container=document.getElementById('chart');}
-    chart=new google.visualization.Timeline(container);
-    buildData();
     options={
       timeline:{showRowLabels:true,groupByRowLabel:true},
       avoidOverlappingGridLines:true,
       backgroundColor:'#f5f7fa',
       tooltip:{isHtml:true}
     };
+
     chart.draw(data,options);
-    google.visualization.events.addListener(chart,'select',toggleDone);
+    google.visualization.events.removeAllListeners(chart);
+    google.visualization.events.addListener(chart,'select',() => {
+      const sel=chart.getSelection();
+      if(!sel.length) return;
+      const row=sel[0].row;
+      tasks[row].done=!tasks[row].done;
+      saveTasks(tasks);
+      buildChart();
+    });
   }
 
-  function toggleDone(){
-    const sel=chart.getSelection();
-    if(!sel.length) return;
-    const row=sel[0].row;
-    doneState[row]=!doneState[row];
-    saveDone();
-    drawChart();
+  // ---------- ADD NEW TASK UI ----------
+  function buildForm(){
+    const form=document.createElement('div');
+    form.id='taskForm';
+    form.innerHTML=`
+      <input id="phase" placeholder="Phase (e.g. Week 2: Floor & Smart)" required />
+      <input id="title" placeholder="Task description" required />
+      <input type="date" id="start" required />
+      <input type="date" id="end" required />
+      <button id="addBtn">Add Task</button>
+    `;
+    document.body.insertBefore(form,document.getElementById('chart'));
+    document.getElementById('addBtn').addEventListener('click',e=>{
+      e.preventDefault();
+      const phase=document.getElementById('phase').value.trim();
+      const title=document.getElementById('title').value.trim();
+      const start=document.getElementById('start').value;
+      const end=document.getElementById('end').value;
+      if(!(phase&&title&&start&&end)){
+        alert('Please fill out all fields');return;
+      }
+      if(new Date(start)>new Date(end)){
+        alert('Start date must be before End date');return;
+      }
+      tasks.push({phase,title,start,end,done:false,id:Date.now()});
+      saveTasks(tasks);
+      // Clear fields
+      document.getElementById('phase').value='';
+      document.getElementById('title').value='';
+      document.getElementById('start').value='';
+      document.getElementById('end').value='';
+      buildChart();
+    });
   }
-
-  window.addEventListener('resize',()=>{if(chart) chart.draw(data,options);} );
 </script>
 </head>
 <body>
-  <h1>Laundry‑Room Renovation – Summer 2025</h1>
-  <p id="hint">Click a bar when you finish a task – it turns grey for a victory lap 🏁</p>
+  <h1>Laundry-Room Renovation – Summer 2025</h1>
+  <p id="hint">Click a bar when you finish a task 🏁 – or add a new one below:</p>
   <div id="chart"></div>
 </body>
 </html>
