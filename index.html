@@ -1,38 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Lavanderia 2.0 - Caldas revanche!</title>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
-<style>
-  html,body{height:100%;margin:0;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif}
-  h1{margin:10px 6px;text-align:center;font-family:'Fredoka',sans-serif;font-weight:600;color:#333}
-  #chart{width:100%;height:70vh}
-  #hint{text-align:center;font-family:'Fredoka',sans-serif;font-size:1rem;margin-top:4px;color:#555}
-  #taskForm{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px;font-family:'Fredoka',sans-serif}
-  #taskForm input, #taskForm button{padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:0.9rem}
-  #taskForm input[type="date"]{font-family:inherit}
-  #taskForm button{background:#06d6a0;color:#fff;cursor:pointer;border:none;font-weight:600}
-  #taskForm button:hover{background:#05b68b}
-  @media(max-width:600px){#chart{height:60vh}}
-</style>
-<script src="https://www.gstatic.com/charts/loader.js"></script>
+  <meta charset="UTF-8" />
+  <title>Laundry‑Room Planner – Interactive Gantt</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --mint:#06d6a0;
+      --mint-dark:#05b68b;
+      --bg:#f5f7fa;
+      --shadow:0 4px 10px rgba(0,0,0,.05);
+    }
+    html,body{height:100%;margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif}
+    h1{margin:10px 6px;text-align:center;font-family:'Fredoka',sans-serif;font-weight:600;color:#333}
+
+    /* Header image */
+    #hero{width:100%;max-height:220px;object-fit:cover;display:block;box-shadow:var(--shadow)}
+
+    #controls{padding:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;box-shadow:var(--shadow);background:#fff;margin:10px 6px;border-radius:8px}
+    #controls input, #controls button{padding:8px;border:1px solid #ccc;border-radius:4px;font-size:.9rem;font-family:'Fredoka',sans-serif}
+    #controls input[type="date"]{font-family:inherit}
+    #controls button{background:var(--mint);color:#fff;cursor:pointer;border:none;font-weight:600}
+    #controls button:hover{background:var(--mint-dark)}
+
+    #tasksTbl{width:96%;margin:0 auto 10px;border-collapse:collapse;font-size:.85rem;font-family:'Fredoka',sans-serif;background:#fff;box-shadow:var(--shadow)}
+    #tasksTbl th,#tasksTbl td{padding:6px 8px;border-bottom:1px solid #e0e0e0;text-align:left}
+    #tasksTbl th{background:#fafafa;font-weight:600}
+    #tasksTbl tr:hover{background:#f0fbf7}
+    .tbl-btn{background:none;border:none;cursor:pointer;font-size:1rem}
+    .tbl-btn.edit{color:#4cc9f0}
+    .tbl-btn.del{color:#ff6f61}
+
+    #chart{width:96%;height:50vh;margin:0 auto 20px}
+
+    @media(max-width:600px){
+      #chart{height:45vh}
+      #controls{flex-direction:column;align-items:stretch}
+    }
+  </style>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+</head>
+<body>
+  <h1>Laundry‑Room Renovation Planner</h1>
+  <img src="laundry.png" id="hero" alt="Laundry room panorama"/>
+
+  <!-- ────── TASK FORM CONTROLS ────── -->
+  <form id="controls">
+    <input id="phase" placeholder="Phase (e.g. Week 2)" required />
+    <input id="title" placeholder="Task description" required />
+    <input type="date" id="start" required />
+    <input type="date" id="end" required />
+    <button id="saveBtn" type="submit">Add Task</button>
+    <button id="cancelBtn" type="button" style="display:none;background:#999">Cancel</button>
+    <input type="hidden" id="taskId" />
+  </form>
+
+  <!-- ────── TASK TABLE ────── -->
+  <table id="tasksTbl">
+    <thead><tr><th>Phase</th><th>Task</th><th>Start</th><th>End</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- ────── GANTT CHART ────── -->
+  <div id="chart"></div>
+
 <script>
+  /* ───── CONFIG & STATE ───── */
   google.charts.load('current',{packages:['timeline']});
   google.charts.setOnLoadCallback(init);
 
-  const palette=[
-    '#ff6f61','#6ec5ff','#ffd166','#06d6a0','#e14ecd',
-    '#ffb5a7','#4cc9f0','#c77dff','#70d6ff','#ffafcc'
-  ];
+  const palette=['#ff6f61','#6ec5ff','#ffd166','#06d6a0','#e14ecd','#ffb5a7','#4cc9f0','#c77dff','#70d6ff','#ffafcc'];
+  const storageKey='laundryRenoTasks_v4';
+  let tasks=[];
 
-  const storageKey='laundryRenoTasks_v2';
-
-  const defaultTasks=[
-    ['Pre-Renovation','🧹 Purge & Sort','2025-06-01','2025-06-02'],
-    ['Pre-Renovation','📏 Measure & Plan','2025-06-02','2025-06-03'],
-    ['Pre-Renovation','🛒 Order Materials','2025-06-03','2025-06-05'],
-    ['Pre-Renovation','📐 Surface Prep & Masking','2025-06-06','2025-06-06'],
+  const seededTasks=[
+    ['Pre‑Renovation','🧹 Purge & Sort','2025-06-01','2025-06-02'],
+    ['Pre‑Renovation','📏 Measure & Plan','2025-06-02','2025-06-03'],
+    ['Pre‑Renovation','🛒 Order Materials','2025-06-03','2025-06-05'],
+    ['Pre‑Renovation','📐 Surface Prep & Masking','2025-06-06','2025-06-06'],
 
     ['Week 1: Light & Colour','💡 Swap Ceiling Lights','2025-06-07','2025-06-07'],
     ['Week 1: Light & Colour','🎨 Paint Accent Wall','2025-06-08','2025-06-08'],
@@ -50,109 +97,124 @@
     ['Week 4: Finishing','🎨 Spray Paint Visible Pipes','2025-06-28','2025-06-28'],
     ['Week 4: Finishing','🧺 Install Pulley Drying Rack','2025-06-29','2025-06-29'],
     ['Week 4: Finishing','☕ Coffee Nook & Décor','2025-06-30','2025-06-30'],
-    ['Week 4: Finishing','✅ QA + Snag-list Fixes','2025-07-01','2025-07-01'],
+    ['Week 4: Finishing','✅ QA + Snag‑list Fixes','2025-07-01','2025-07-01'],
 
-    ['Post-Renovation','🔧 Smart-Sensor Test & Tuning','2025-07-02','2025-07-02'],
-    ['Post-Renovation','📸 Photo Docs / Celebrate','2025-07-03','2025-07-03']
-  ].map((t,i)=>({phase:t[0],title:t[1],start:t[2],end:t[3],done:false,id:i}));
-
-  let tasks;
-  let chart,data,options,container;
+    ['Post‑Renovation','🔧 Smart‑Sensor Test & Tuning','2025-07-02','2025-07-02'],
+    ['Post‑Renovation','📸 Photo Docs / Celebrate','2025-07-03','2025-07-03']
+  ].map((t,i)=>({phase:t[0],title:t[1],start:t[2],end:t[3],done:false,id:Date.now()+i}));
 
   function init(){
     tasks=loadTasks();
+    buildTable();
     buildChart();
-    buildForm();
+    bindForm();
     window.addEventListener('resize',()=>chart.draw(data,options));
   }
 
+  /* ───── STORAGE ───── */
   function loadTasks(){
-    const stored=localStorage.getItem(storageKey);
-    if(stored){
-      try{return JSON.parse(stored);}catch(e){console.error(e)}
+    const raw=localStorage.getItem(storageKey);
+    if(raw){
+      try{const parsed=JSON.parse(raw);if(Array.isArray(parsed)&&parsed.length) return parsed;}catch(e){console.error(e);}
     }
-    saveTasks(defaultTasks);
-    return JSON.parse(JSON.stringify(defaultTasks));
+    // first run – seed default checklist
+    localStorage.setItem(storageKey,JSON.stringify(seededTasks));
+    return JSON.parse(JSON.stringify(seededTasks));
+  }
+  function saveTasks(){localStorage.setItem(storageKey,JSON.stringify(tasks));}
+
+  /* ───── FORM HANDLERS ───── */
+  function bindForm(){
+    const form=document.getElementById('controls');
+    form.addEventListener('submit',e=>{
+      e.preventDefault();
+      const id=document.getElementById('taskId').value;
+      const obj={
+        phase:document.getElementById('phase').value.trim(),
+        title:document.getElementById('title').value.trim(),
+        start:document.getElementById('start').value,
+        end:document.getElementById('end').value,
+        done:false,
+        id:id||Date.now()
+      };
+      if(new Date(obj.start)>new Date(obj.end)) return alert('Start must be before End');
+      if(id){
+        const idx=tasks.findIndex(t=>t.id==id);
+        tasks[idx]=obj;
+      }else{
+        tasks.push(obj);
+      }
+      resetForm();
+      persistAndRefresh();
+    });
+    document.getElementById('cancelBtn').addEventListener('click',resetForm);
+  }
+  function resetForm(){
+    document.getElementById('phase').value='';
+    document.getElementById('title').value='';
+    document.getElementById('start').value='';
+    document.getElementById('end').value='';
+    document.getElementById('taskId').value='';
+    document.getElementById('saveBtn').textContent='Add Task';
+    document.getElementById('cancelBtn').style.display='none';
   }
 
-  function saveTasks(t){localStorage.setItem(storageKey,JSON.stringify(t));}
+  /* ───── TABLE UI ───── */
+  function buildTable(){
+    const tbody=document.querySelector('#tasksTbl tbody');
+    tbody.innerHTML='';
+    if(!tasks.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:#777;padding:12px">No tasks yet</td></tr>';return;}
+    tasks.sort((a,b)=>new Date(a.start)-new Date(b.start));
+    tasks.forEach(t=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${t.phase}</td><td>${t.title}</td><td>${t.start}</td><td>${t.end}</td>
+        <td>
+          <button class="tbl-btn edit" title="Edit">✏️</button>
+          <button class="tbl-btn del" title="Delete">🗑️</button>
+        </td>`;
+      tbody.appendChild(tr);
+      tr.querySelector('.edit').addEventListener('click',()=>{
+        document.getElementById('phase').value=t.phase;
+        document.getElementById('title').value=t.title;
+        document.getElementById('start').value=t.start;
+        document.getElementById('end').value=t.end;
+        document.getElementById('taskId').value=t.id;
+        document.getElementById('saveBtn').textContent='Save';
+        document.getElementById('cancelBtn').style.display='inline-block';
+      });
+      tr.querySelector('.del').addEventListener('click',()=>{
+        if(confirm('Delete this task?')){
+          tasks=tasks.filter(x=>x.id!==t.id);
+          persistAndRefresh();
+        }
+      });
+    });
+  }
 
+  /* ───── GANTT CHART ───── */
+  let chart,data,options;
   function buildChart(){
-    if(!container) container=document.getElementById('chart');
-    if(!chart) chart=new google.visualization.Timeline(container);
-
+    if(!chart){chart=new google.visualization.Timeline(document.getElementById('chart'));}
     data=new google.visualization.DataTable();
-    data.addColumn({type:'string',id:'Phase'});
-    data.addColumn({type:'string',id:'Task'});
-    data.addColumn({type:'date',id:'Start'});
-    data.addColumn({type:'date',id:'End'});
+    data.addColumn('string','Phase');
+    data.addColumn('string','Task');
+    data.addColumn('date','Start');
+    data.addColumn('date','End');
     data.addColumn({type:'string',role:'style'});
 
-    tasks.forEach((t,idx)=>{
-      const color= palette[idx%palette.length];
-      const style=t.done? 'color:#A0A0A0;stroke-dasharray:5 2':'';
-      data.addRow([t.phase,t.title,new Date(t.start),new Date(t.end),style||`color:${color}`]);
+    tasks.forEach((t,i)=>{
+      const style=`color:${palette[i%palette.length]}`;
+      data.addRow([t.phase,t.title,new Date(t.start),new Date(t.end),style]);
     });
-
-    options={
-      timeline:{showRowLabels:true,groupByRowLabel:true},
-      avoidOverlappingGridLines:true,
-      backgroundColor:'#f5f7fa',
-      tooltip:{isHtml:true}
-    };
-
+    options={timeline:{showRowLabels:true,groupByRowLabel:true},avoidOverlappingGridLines:true,backgroundColor:'#f5f7fa'};
     chart.draw(data,options);
-    google.visualization.events.removeAllListeners(chart);
-    google.visualization.events.addListener(chart,'select',() => {
-      const sel=chart.getSelection();
-      if(!sel.length) return;
-      const row=sel[0].row;
-      tasks[row].done=!tasks[row].done;
-      saveTasks(tasks);
-      buildChart();
-    });
   }
 
-  // ---------- ADD NEW TASK UI ----------
-  function buildForm(){
-    const form=document.createElement('div');
-    form.id='taskForm';
-    form.innerHTML=`
-      <input id="phase" placeholder="Phase (e.g. Week 2: Floor & Smart)" required />
-      <input id="title" placeholder="Task description" required />
-      <input type="date" id="start" required />
-      <input type="date" id="end" required />
-      <button id="addBtn">Add Task</button>
-    `;
-    document.body.insertBefore(form,document.getElementById('chart'));
-    document.getElementById('addBtn').addEventListener('click',e=>{
-      e.preventDefault();
-      const phase=document.getElementById('phase').value.trim();
-      const title=document.getElementById('title').value.trim();
-      const start=document.getElementById('start').value;
-      const end=document.getElementById('end').value;
-      if(!(phase&&title&&start&&end)){
-        alert('Please fill out all fields');return;
-      }
-      if(new Date(start)>new Date(end)){
-        alert('Start date must be before End date');return;
-      }
-      tasks.push({phase,title,start,end,done:false,id:Date.now()});
-      saveTasks(tasks);
-      // Clear fields
-      document.getElementById('phase').value='';
-      document.getElementById('title').value='';
-      document.getElementById('start').value='';
-      document.getElementById('end').value='';
-      buildChart();
-    });
+  function persistAndRefresh(){
+    saveTasks();
+    buildTable();
+    buildChart();
   }
 </script>
-  <img src="new.png" alt="New Laundry!" width="300" />
-</head>
-<body>
-  <h1>Laundry-Room Renovation – Summer 2025</h1>
-  <p id="hint">Click a bar when you finish a task 🏁 – or add a new one below:</p>
-  <div id="chart"></div>
 </body>
 </html>
